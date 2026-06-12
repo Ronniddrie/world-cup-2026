@@ -129,8 +129,13 @@
   .pill.soon{color:var(--pitch);border:1px solid #6b5418}
   .flag{font-size:14px}
   .empty{text-align:center;color:var(--faint);padding:50px 20px;font-size:14px}
-  footer{color:var(--faint);font-size:11px;line-height:1.6;padding:26px 4px 0;border-top:1px solid var(--line);margin-top:22px}
-  footer b{color:var(--mut);font-weight:600}
+  .picker-ov{position:fixed;inset:0;background:rgba(2,7,19,.82);z-index:100;display:flex;align-items:flex-end;justify-content:center;backdrop-filter:blur(3px)}
+  .picker{background:var(--card);border:1px solid var(--line);border-bottom:none;border-radius:18px 18px 0 0;width:100%;max-width:680px;max-height:72vh;overflow:auto;padding:18px 14px 26px}
+  .ptitle{font-family:"Barlow Condensed";font-weight:700;font-size:21px;letter-spacing:.06em;text-transform:uppercase;color:var(--gold);margin:0 4px 12px}
+  .pgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(146px,1fr));gap:8px}
+  .pteam{font:600 13.5px/1.2 -apple-system,system-ui;color:var(--ink);background:var(--card2);border:1px solid var(--line);padding:11px 8px;border-radius:10px;cursor:pointer;text-align:left;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .pteam.sel{background:var(--qatar);border-color:var(--qatar);color:#fff;font-weight:700}
+  .pteam:active{transform:scale(.97)}
   @media(max-width:420px){h1{font-size:25px}h1 small{letter-spacing:.2em}.applogo{width:48px;height:48px;border-radius:12px}.countdown{font-size:46px}.rail .teams{font-size:21px}}
 </style>
 </head>
@@ -152,15 +157,13 @@
 
   <div class="filters">
     <button data-f="all" class="on">All</button>
-    <button data-f="qatar" class="q">🏴󠁧󠁢󠁳󠁣󠁴󠁿 Scotland</button>
+    <button data-f="qatar" class="q" id="favBtn">🏴󠁧󠁢󠁳󠁣󠁴󠁿 Scotland ▾</button>
     <button data-f="today">Today</button>
     <button data-f="live">Live</button>
   </div>
   <div class="feed" id="feed"><i></i><span>Connecting to live scores…</span></div>
 
   <div id="list"></div>
-
-
 </div>
 
 <script>
@@ -286,7 +289,7 @@ const F = [
  ["2026-07-18T21:00Z","TBD","TBD","3RD","Miami Stadium","Miami"],
  ["2026-07-19T19:00Z","TBD","TBD","FINAL","New York New Jersey Stadium","New Jersey"],
 ].map((r,i)=>({i,ko:new Date(r[0]),h:r[1],a:r[2],g:r[3],v:r[4],c:r[5],
-   qatar:(r[1]==="Scotland"||r[2]==="Scotland"),
+   qatar:false,
    ko_known:(r[1]!=="TBD")}));
 
 const STAGE_LABEL={R32:"Round of 32",R16:"Round of 16",QF:"Quarter-final",SF:"Semi-final","3RD":"3rd place","FINAL":"Final"};
@@ -323,6 +326,41 @@ const ALIAS={
 };
 const key=s=>{const n=norm(s);return ALIAS[n]||n;};
 
+/* ---------- favourite team (per-device, saved in the browser) ---------- */
+const FLAGS={"Mexico":"🇲🇽","South Africa":"🇿🇦","South Korea":"🇰🇷","Czechia":"🇨🇿","Canada":"🇨🇦",
+"Bosnia & Herz.":"🇧🇦","USA":"🇺🇸","Paraguay":"🇵🇾","Qatar":"🇶🇦","Switzerland":"🇨🇭","Brazil":"🇧🇷",
+"Morocco":"🇲🇦","Haiti":"🇭🇹","Scotland":"🏴󠁧󠁢󠁳󠁣󠁴󠁿","Australia":"🇦🇺","Türkiye":"🇹🇷","Germany":"🇩🇪",
+"Curaçao":"🇨🇼","Netherlands":"🇳🇱","Japan":"🇯🇵","Ivory Coast":"🇨🇮","Ecuador":"🇪🇨","Sweden":"🇸🇪",
+"Tunisia":"🇹🇳","Spain":"🇪🇸","Cape Verde":"🇨🇻","Belgium":"🇧🇪","Egypt":"🇪🇬","Saudi Arabia":"🇸🇦",
+"Uruguay":"🇺🇾","Iran":"🇮🇷","New Zealand":"🇳🇿","France":"🇫🇷","Senegal":"🇸🇳","Iraq":"🇮🇶",
+"Norway":"🇳🇴","Argentina":"🇦🇷","Algeria":"🇩🇿","Austria":"🇦🇹","Jordan":"🇯🇴","Portugal":"🇵🇹",
+"DR Congo":"🇨🇩","England":"🏴󠁧󠁢󠁥󠁮󠁧󠁿","Croatia":"🇭🇷","Ghana":"🇬🇭","Panama":"🇵🇦","Uzbekistan":"🇺🇿","Colombia":"🇨🇴"};
+const DEFAULT_FAV="Scotland";
+let FAV=DEFAULT_FAV;
+try{FAV=localStorage.getItem("wc26-fav")||DEFAULT_FAV;}catch(e){}
+const favFlag=()=>FLAGS[FAV]||"⚽";
+function applyFav(){
+  F.forEach(m=>{m.qatar=m.ko_known&&(key(m.h)===key(FAV)||key(m.a)===key(FAV));});
+  const b=document.getElementById("favBtn");
+  if(b)b.textContent=`${favFlag()} ${FAV} ▾`;
+}
+function openPicker(){
+  const teams=[...new Set(F.filter(m=>m.ko_known).flatMap(m=>[m.h,m.a]))].sort((a,b)=>a.localeCompare(b));
+  const ov=document.createElement("div");ov.className="picker-ov";
+  ov.innerHTML=`<div class="picker"><div class="ptitle">Pick your team</div><div class="pgrid">${
+    teams.map(t=>`<button class="pteam${t===FAV?" sel":""}" data-t="${t}">${FLAGS[t]||"⚽"} ${t}</button>`).join("")
+  }</div></div>`;
+  ov.addEventListener("click",e=>{
+    if(e.target===ov){ov.remove();return;}
+    const b=e.target.closest(".pteam");if(!b)return;
+    FAV=b.dataset.t;
+    try{localStorage.setItem("wc26-fav",FAV);}catch(err){}
+    applyFav();render();ov.remove();
+  });
+  document.body.appendChild(ov);
+}
+applyFav();
+
 const WC_LEAGUE_ID = 4429; // FIFA World Cup on TheSportsDB
 
 function absorbEvent(ev){
@@ -340,7 +378,7 @@ function absorbEvent(ev){
         m=cands.find(x=>vn && (vn.includes(norm(x.c))||norm(x.v).includes(vn)));
       }
       if(m){ m.h=ev.strHomeTeam; m.a=ev.strAwayTeam; m.ko_known=true;
-             m.qatar=(key(m.h)==="scotland"||key(m.a)==="scotland"); }
+             m.qatar=(key(m.h)===key(FAV)||key(m.a)===key(FAV)); }
     }
   }
   if(!m) return 0;
@@ -352,6 +390,8 @@ function absorbEvent(ev){
 }
 
 let seasonLoadedAt=0;
+function fetchT(url,ms=10000){const c=new AbortController();const t=setTimeout(()=>c.abort(),ms);
+  return fetch(url,{cache:"no-store",signal:c.signal}).finally(()=>clearTimeout(t));}
 async function pullScores(){
   const feed=document.getElementById("feed");
   let got=0, ok=false;
@@ -359,7 +399,7 @@ async function pullScores(){
   // 1) season-wide results (all played matches keep their scores) — refresh every 10 min
   if(Date.now()-seasonLoadedAt>10*60000){
     try{
-      const res=await fetch(`https://www.thesportsdb.com/api/v1/json/${KEY}/eventsseason.php?id=${WC_LEAGUE_ID}&s=2026`,{cache:"no-store"});
+      const res=await fetchT(`https://www.thesportsdb.com/api/v1/json/${KEY}/eventsseason.php?id=${WC_LEAGUE_ID}&s=2026`);
       if(res.ok){const data=await res.json(); ok=true; seasonLoadedAt=Date.now();
         (data.events||[]).forEach(ev=>{got+=absorbEvent(ev);});}
     }catch(e){}
@@ -369,7 +409,7 @@ async function pullScores(){
   for(let off=-1;off<=0;off++){
     const d=new Date(Date.now()+off*864e5).toISOString().slice(0,10);
     try{
-      const res=await fetch(`https://www.thesportsdb.com/api/v1/json/${KEY}/eventsday.php?d=${d}&s=Soccer`,{cache:"no-store"});
+      const res=await fetchT(`https://www.thesportsdb.com/api/v1/json/${KEY}/eventsday.php?d=${d}&s=Soccer`);
       if(!res.ok) continue;
       const data=await res.json(); ok=true;
       (data.events||[]).forEach(ev=>{got+=absorbEvent(ev);});
@@ -402,7 +442,7 @@ function renderRail(){
     const m=lives[0], s=scores[m.i];
     rail.className="rail islive";
     rail.innerHTML=`<div class="top"><span class="live-dot"><i></i>Live now</span>
-      ${m.qatar?'<span class="qchip">Scotland</span>':`<span class="badge">Group ${m.g}</span>`}</div>
+      ${m.qatar?'<span class="qchip">'+FAV+'</span>':`<span class="badge">Group ${m.g}</span>`}</div>
       <div class="match">
         <div class="teams">${m.h} <span style="color:var(--faint)">v</span> ${m.a}
           <div class="meta">${m.v} · ${m.c}${lives.length>1?` &nbsp;·&nbsp; +${lives.length-1} more live`:""}</div></div>
@@ -419,11 +459,11 @@ function renderRail(){
   const qn=nextMatch(true);
   const sameQ=qn&&qn.i===m.i;
   rail.innerHTML=`<div class="top"><span class="badge">Next kick-off</span>
-      ${m.qatar?'<span class="qchip">🏴󠁧󠁢󠁳󠁣󠁴󠁿 Scotland</span>':`<span class="badge">${m.ko_known?'Group '+m.g:STAGE_LABEL[m.g]}</span>`}</div>
+      ${m.qatar?'<span class="qchip">'+favFlag()+' '+FAV+'</span>':`<span class="badge">${m.ko_known?'Group '+m.g:STAGE_LABEL[m.g]}</span>`}</div>
     <div class="countdown tnum ${m.qatar?'q':''}">${cd}</div>
     <div class="match"><div class="teams">${m.ko_known?`${m.h} <span style="color:var(--faint)">v</span> ${m.a}`:STAGE_LABEL[m.g]}
       <div class="meta">${dohaTime(m.ko)} · ${m.v} · ${m.c}</div>
-      ${(!sameQ&&qn)?`<div class="meta" style="margin-top:6px;color:var(--qatar-ink)">🏴󠁧󠁢󠁳󠁣󠁴󠁿 Next Scotland: ${qn.h} v ${qn.a} · ${dohaDayLong(qn.ko)} ${dohaTime(qn.ko)}</div>`:""}
+      ${(!sameQ&&qn)?`<div class="meta" style="margin-top:6px;color:var(--qatar-ink)">${favFlag()} Next ${FAV}: ${qn.h} v ${qn.a} · ${dohaDayLong(qn.ko)} ${dohaTime(qn.ko)}</div>`:""}
     </div></div>`;
 }
 function fmtCountdown(ms){
@@ -461,8 +501,8 @@ function render(){
     let center;
     if(m.ko_known){
       center = sc
-        ? `<span>${m.qatar?'<span class="flag">🏴󠁧󠁢󠁳󠁣󠁴󠁿</span> ':''}${m.h}</span> <span class="sc">${sc}</span> <span>${m.a}</span>`
-        : `<span>${m.qatar?'<span class="flag">🏴󠁧󠁢󠁳󠁣󠁴󠁿</span> ':''}${m.h}</span> <span class="vs">v</span> <span>${m.a}</span>`;
+        ? `<span>${m.qatar?'<span class="flag">'+favFlag()+'</span> ':''}${m.h}</span> <span class="sc">${sc}</span> <span>${m.a}</span>`
+        : `<span>${m.qatar?'<span class="flag">'+favFlag()+'</span> ':''}${m.h}</span> <span class="vs">v</span> <span>${m.a}</span>`;
     }else{
       center = `<span style="color:var(--gold)">${stage}</span>`;
     }
@@ -500,7 +540,9 @@ pullScores(); setInterval(pullScores,SCORE_REFRESH_MS);
 
 /* ---------- filters ---------- */
 document.querySelectorAll(".filters button").forEach(b=>{
-  b.onclick=()=>{document.querySelectorAll(".filters button").forEach(x=>x.classList.remove("on"));
+  b.onclick=()=>{
+    if(b.dataset.f==="qatar"&&filter==="qatar"){openPicker();return;}
+    document.querySelectorAll(".filters button").forEach(x=>x.classList.remove("on"));
     b.classList.add("on");filter=b.dataset.f;render();
     if(filter!=="live")window.scrollTo({top:document.querySelector(".filters").offsetTop-8,behavior:"instant"});};
 });
