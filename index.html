@@ -71,6 +71,12 @@
   .rail.islive{border-color:#8a1f2e;background:linear-gradient(180deg,#3a0f23,var(--card))}
   .live-dot{display:inline-flex;align-items:center;gap:7px;color:var(--live);font:700 11px/1 -apple-system;letter-spacing:.18em;text-transform:uppercase}
   .live-dot i{width:8px;height:8px;border-radius:50%;background:var(--live);animation:pulse 1.3s infinite}
+  .listen{display:inline-flex;align-items:center;gap:5px;margin-top:10px;
+    font:700 11px/1 -apple-system,system-ui;letter-spacing:.02em;color:#241a02;
+    background:linear-gradient(180deg,#F7C843,#C9921F);border:none;padding:7px 11px;border-radius:999px;
+    cursor:pointer;text-decoration:none;box-shadow:0 2px 8px rgba(232,184,61,.28)}
+  .listen:active{transform:scale(.97)}
+  .listen .note{font-weight:500;font-size:9px;color:#3a2c08;opacity:.75}
   @keyframes pulse{0%{box-shadow:0 0 0 0 rgba(255,59,92,.55)}70%{box-shadow:0 0 0 9px rgba(255,59,92,0)}100%{box-shadow:0 0 0 0 rgba(255,59,92,0)}}
 
   .countdown{padding:6px 16px 4px;font-family:"Barlow Condensed";font-weight:700;font-size:54px;letter-spacing:.01em;line-height:1;color:var(--pitch)}
@@ -85,10 +91,11 @@
   /* filters */
   .filters{display:flex;gap:7px;margin:18px 0 6px;position:sticky;top:env(safe-area-inset-top,0px);z-index:30;
     padding:10px 0;background:linear-gradient(180deg,var(--bg) 70%,transparent)}
+  .filters{flex-wrap:wrap}
   .filters button{
-    flex:1;font:600 13px/1 -apple-system,system-ui;letter-spacing:.02em;
+    flex:1 1 auto;min-width:62px;font:600 13px/1 -apple-system,system-ui;letter-spacing:.02em;
     color:var(--mut);background:var(--card);border:1px solid var(--line);
-    padding:11px 6px;border-radius:11px;cursor:pointer;transition:.15s;white-space:nowrap;
+    padding:11px 10px;border-radius:11px;cursor:pointer;transition:.15s;white-space:nowrap;
   }
   .filters button.on{color:#2a1d04;background:var(--pitch);border-color:var(--pitch);font-weight:700}
   .filters button.q.on{background:var(--qatar);border-color:var(--qatar);color:#fff}
@@ -130,6 +137,25 @@
   .pill.soon{color:var(--pitch);border:1px solid #6b5418}
   .flag{font-size:14px}
   .empty{text-align:center;color:var(--faint);padding:50px 20px;font-size:14px}
+  .gwrap{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:14px;padding-top:6px}
+  .gcard{background:var(--card);border:1px solid var(--line);border-radius:14px;overflow:hidden}
+  .ghead{font-family:"Barlow Condensed";font-weight:700;font-size:16px;letter-spacing:.14em;text-transform:uppercase;
+    color:var(--gold);padding:11px 14px;background:var(--card2);border-bottom:1px solid var(--line)}
+  table.gt{width:100%;border-collapse:collapse;font:500 12.5px/1 -apple-system,system-ui}
+  .gt th{font:700 10px/1 -apple-system;letter-spacing:.04em;color:var(--faint);text-transform:uppercase;
+    padding:8px 4px;text-align:center;border-bottom:1px solid var(--line)}
+  .gt th.tm{text-align:left;padding-left:12px}
+  .gt td{padding:9px 4px;text-align:center;color:var(--mut);border-bottom:1px solid #122a5e}
+  .gt td.tm{text-align:left;padding-left:12px;color:var(--ink);font-weight:600;font-family:"Barlow Condensed";font-size:15px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:150px}
+  .gt td.pts{color:var(--gold);font-weight:700}
+  .gt tr:last-child td{border-bottom:none}
+  .gt tr.qual td.tm{box-shadow:inset 3px 0 0 var(--green)}
+  .gt td.fav{color:var(--qatar-ink)}
+  .gt .pos{color:var(--faint);font-weight:700;width:18px}
+  #updbar{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(16px + env(safe-area-inset-bottom,0px));z-index:90;
+    background:linear-gradient(180deg,#F7C843,#C9921F);color:#241a02;font:700 13.5px/1 -apple-system,system-ui;
+    padding:13px 18px;border-radius:999px;box-shadow:0 6px 24px rgba(0,0,0,.55);cursor:pointer;white-space:nowrap;animation:updin .35s ease}
+  @keyframes updin{from{transform:translate(-50%,90px);opacity:0}to{transform:translate(-50%,0);opacity:1}}
   .picker-ov{position:fixed;inset:0;background:rgba(2,7,19,.82);z-index:100;display:flex;align-items:flex-end;justify-content:center;backdrop-filter:blur(3px)}
   .picker{background:var(--card);border:1px solid var(--line);border-bottom:none;border-radius:18px 18px 0 0;width:100%;max-width:680px;max-height:72vh;overflow:auto;padding:18px 14px 26px}
   .ptitle{font-family:"Barlow Condensed";font-weight:700;font-size:21px;letter-spacing:.06em;text-transform:uppercase;color:var(--gold);margin:0 4px 12px}
@@ -161,6 +187,7 @@
     <button data-f="qatar" class="q" id="favBtn">🏴󠁧󠁢󠁳󠁣󠁴󠁿 Scotland ▾</button>
     <button data-f="today">Today</button>
     <button data-f="live">Live</button>
+    <button data-f="groups">Groups</button>
   </div>
   <div class="feed" id="feed"><i></i><span>Connecting to live scores…</span></div>
 
@@ -317,13 +344,16 @@ function statusOf(m){
 /* ---------- live score feed (TheSportsDB) ---------- */
 const KEY = PREMIUM_KEY || FREE_KEY;
 function norm(s){return (s||"").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g,"")
-  .replace(/&/g,"and").replace(/[^a-z ]/g,"").trim();}
+  .replace(/&/g," and ").replace(/[^a-z]+/g," ").trim();}
 const ALIAS={
- "united states":"usa","us":"usa","korea republic":"south korea","ir iran":"iran",
- "cote divoire":"ivory coast","czech republic":"czechia","turkey":"turkiye",
+ "united states":"usa","united states of america":"usa","us":"usa",
+ "korea republic":"south korea","korea":"south korea",
+ "ir iran":"iran","iran islamic republic of":"iran",
+ "cote d ivoire":"ivory coast","cote divoire":"ivory coast",
+ "czech republic":"czechia","turkey":"turkiye",
  "bosnia and herzegovina":"bosnia and herz","bosnia herzegovina":"bosnia and herz",
- "congo dr":"dr congo","dr congo":"dr congo","cabo verde":"cape verde",
- "new zealand":"new zealand"
+ "congo dr":"dr congo","democratic republic of congo":"dr congo","dr congo":"dr congo",
+ "cabo verde":"cape verde"
 };
 const key=s=>{const n=norm(s);return ALIAS[n]||n;};
 
@@ -367,24 +397,31 @@ const WC_LEAGUE_ID = 4429; // FIFA World Cup on TheSportsDB
 function absorbEvent(ev){
   if(!/world cup/i.test(ev.strLeague||"")) return 0;
   const hk=key(ev.strHomeTeam), ak=key(ev.strAwayTeam);
+  const ts=Date.parse((ev.strTimestamp||ev.dateEvent+"T"+(ev.strTime||"00:00:00"))+ (ev.strTimestamp?"":"Z"));
   let m=F.find(x=>x.ko_known && key(x.h)===hk && key(x.a)===ak);
-  if(!m){
+  if(!m && !isNaN(ts)){
+    // fuzzy: same kick-off window and at least one team name recognised (either side)
+    const c=F.filter(x=>x.ko_known && Math.abs(x.ko.getTime()-ts)<45*60000 &&
+      (key(x.h)===hk||key(x.a)===ak||key(x.h)===ak||key(x.a)===hk));
+    if(c.length===1) m=c[0];
+  }
+  if(!m && !isNaN(ts)){
     // knockout fixture? match TBD slots by kick-off time (+ city if two games share a slot)
-    const ts=Date.parse((ev.strTimestamp||ev.dateEvent+"T"+(ev.strTime||"00:00:00"))+ (ev.strTimestamp?"":"Z"));
-    if(!isNaN(ts)){
-      const cands=F.filter(x=>!x.ko_known && Math.abs(x.ko.getTime()-ts)<45*60000);
-      if(cands.length===1) m=cands[0];
-      else if(cands.length>1){
-        const vn=norm(ev.strVenue||"");
-        m=cands.find(x=>vn && (vn.includes(norm(x.c))||norm(x.v).includes(vn)));
-      }
-      if(m){ m.h=ev.strHomeTeam; m.a=ev.strAwayTeam; m.ko_known=true;
-             m.qatar=(key(m.h)===key(FAV)||key(m.a)===key(FAV)); }
+    const cands=F.filter(x=>!x.ko_known && Math.abs(x.ko.getTime()-ts)<45*60000);
+    if(cands.length===1) m=cands[0];
+    else if(cands.length>1){
+      const vn=norm(ev.strVenue||"");
+      m=cands.find(x=>vn && (vn.includes(norm(x.c))||norm(x.v).includes(vn)));
     }
+    if(m){ m.h=ev.strHomeTeam; m.a=ev.strAwayTeam; m.ko_known=true;
+           m.qatar=(key(m.h)===key(FAV)||key(m.a)===key(FAV)); }
   }
   if(!m) return 0;
   if(ev.intHomeScore!=null&&ev.intHomeScore!==""){
-    scores[m.i]={hs:ev.intHomeScore,as:ev.intAwayScore,status:ev.strStatus||ev.strProgress||"",min:ev.strProgress||""};
+    const swapped=(key(m.h)===ak && key(m.a)===hk);
+    scores[m.i]={hs:swapped?ev.intAwayScore:ev.intHomeScore,
+                 as:swapped?ev.intHomeScore:ev.intAwayScore,
+                 status:ev.strStatus||ev.strProgress||"",min:ev.strProgress||""};
     return 1;
   }
   return 0;
@@ -448,7 +485,9 @@ function renderRail(){
         <div class="teams">${m.h} <span style="color:var(--faint)">v</span> ${m.a}
           <div class="meta">${m.v} · ${m.c}${lives.length>1?` &nbsp;·&nbsp; +${lives.length-1} more live`:""}</div></div>
         <div class="score">${s?`${s.hs}–${s.as}`:'– –'}<span class="min">${s&&s.min?s.min:'LIVE'}</span></div>
-      </div>`;
+      </div>
+      <a class="listen" href="https://www.bbc.co.uk/sounds/play/live:bbc_radio_five_live" target="_blank" rel="noopener">
+        🎧 Listen on BBC 5 Live <span class="note">· may need UK connection</span></a>`;
     return;
   }
   // otherwise: next kick-off countdown
@@ -476,9 +515,60 @@ function fmtCountdown(ms){
   return (d>0?`${d}d `:"")+`${p(h)}:${p(mn)}:${p(s)}`;
 }
 
+function computeStandings(){
+  const G={};
+  F.forEach(m=>{
+    if(!m.ko_known) return;
+    if(!/^[A-L]$/.test(m.g)) return;
+    const s=scores[m.i]; if(!s) return;
+    const fin=statusOf(m)==="fin"; const live=statusOf(m)==="live";
+    if(!fin&&!live) return;
+    (G[m.g]=G[m.g]||{});
+    const T=G[m.g];
+    const hs=+s.hs, as=+s.as;
+    [[m.h,hs,as],[m.a,as,hs]].forEach(([t,f,a])=>{
+      const r=T[t]=T[t]||{t,P:0,W:0,D:0,L:0,GF:0,GA:0,Pts:0};
+      r.P++; r.GF+=f; r.GA+=a;
+      if(f>a){r.W++;r.Pts+=3;} else if(f===a){r.D++;r.Pts++;} else r.L++;
+    });
+  });
+  return G;
+}
+function renderGroups(list){
+  const G=computeStandings();
+  // include every group A–L even before any score, listing teams from fixtures
+  const all={};
+  F.forEach(m=>{ if(m.ko_known&&/^[A-L]$/.test(m.g)){ (all[m.g]=all[m.g]||new Set()).add(m.h); all[m.g].add(m.a); } });
+  const groups=Object.keys(all).sort();
+  if(!groups.length){list.innerHTML='<div class="empty">Group tables appear once the fixtures are set.</div>';return;}
+  let html='<div class="gwrap">';
+  groups.forEach(g=>{
+    const teams=[...all[g]];
+    const rows=teams.map(t=>(G[g]&&G[g][t])||{t,P:0,W:0,D:0,L:0,GF:0,GA:0,Pts:0});
+    rows.sort((a,b)=> b.Pts-a.Pts || (b.GF-b.GA)-(a.GF-a.GA) || b.GF-a.GF || a.t.localeCompare(b.t));
+    html+=`<div class="gcard"><div class="ghead">Group ${g}</div>
+      <table class="gt"><thead><tr>
+        <th></th><th class="tm">Team</th><th>P</th><th>W</th><th>D</th><th>L</th><th>GD</th><th>Pts</th>
+      </tr></thead><tbody>`;
+    rows.forEach((r,i)=>{
+      const gd=r.GF-r.GA; const gds=(gd>0?"+":"")+gd;
+      const isFav=key(r.t)===key(FAV);
+      html+=`<tr class="${i<2?'qual':''}">
+        <td class="pos">${i+1}</td>
+        <td class="tm ${isFav?'fav':''}">${FLAGS[r.t]||""} ${r.t}</td>
+        <td>${r.P}</td><td>${r.W}</td><td>${r.D}</td><td>${r.L}</td>
+        <td>${gds}</td><td class="pts">${r.Pts}</td>
+      </tr>`;
+    });
+    html+='</tbody></table></div>';
+  });
+  html+='</div>';
+  list.innerHTML=html;
+}
 function render(){
   renderRail();
   const list=document.getElementById("list");
+  if(filter==="groups"){renderGroups(list);return;}
   const now=Date.now();
   let items=F.slice();
   if(filter==="qatar")items=items.filter(m=>m.qatar);
@@ -538,6 +628,26 @@ document.getElementById("applogo").src=document.querySelector('link[rel="apple-t
 })();
 setInterval(render,30000);            // refresh statuses
 pullScores(); setInterval(pullScores,SCORE_REFRESH_MS);
+
+/* ---------- update notifier ---------- */
+let pageTag=null;
+async function checkUpdate(){
+  if(!/^https?:/.test(location.protocol)) return;     // skip when opened as a local file
+  try{
+    const r=await fetch(location.href,{method:"HEAD",cache:"no-store"});
+    const tag=r.headers.get("etag")||r.headers.get("last-modified");
+    if(!tag) return;
+    if(pageTag===null){pageTag=tag;return;}            // remember the version we're running
+    if(tag!==pageTag&&!document.getElementById("updbar")){
+      const b=document.createElement("div");b.id="updbar";
+      b.textContent="⚽ App updated — tap to reload";
+      b.onclick=()=>location.reload();
+      document.body.appendChild(b);
+    }
+  }catch(e){}
+}
+checkUpdate(); setInterval(checkUpdate,5*60000);
+document.addEventListener("visibilitychange",()=>{if(!document.hidden)checkUpdate();});
 
 /* ---------- filters ---------- */
 document.querySelectorAll(".filters button").forEach(b=>{
