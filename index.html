@@ -394,6 +394,7 @@ applyFav();
 
 const WC_LEAGUE_ID = 4429; // FIFA World Cup on TheSportsDB
 const ESPN_SCOREBOARD = "https://site.api.espn.com/apis/site/v2/sports/soccer/fifa.world/scoreboard";
+const ESPN_FULL_RANGES = ["20260611-20260704","20260705-20260719"];
 
 function isGroupStage(m){return /^[A-L]$/.test(m.g);}
 function stageText(m){return isGroupStage(m)?`Group ${m.g}`:(STAGE_LABEL[m.g]||m.g);}
@@ -404,11 +405,10 @@ function eventTime(ev){
   if(!raw||raw==="T00:00:00") return NaN;
   return Date.parse(/[zZ]|[+-]\d\d:?\d\d$/.test(raw)?raw:raw+"Z");
 }
-const ESPN_DATES=[...new Set(F.filter(m=>!isGroupStage(m)).map(m=>dateKeyUTC(m.ko)))];
 function espnDateWindow(){
-  const days=[];
-  for(let off=-1;off<=1;off++) days.push(dateKeyUTC(new Date(Date.now()+off*864e5)));
-  return [...new Set(days.filter(d=>ESPN_DATES.includes(d)))];
+  const from=dateKeyUTC(new Date(Date.now()-36*60*60000));
+  const to=dateKeyUTC(new Date(Date.now()+36*60*60000));
+  return [`${from}-${to}`];
 }
 function venueText(venue){
   const city=venue&&venue.address&&venue.address.city?venue.address.city:"";
@@ -512,9 +512,8 @@ function fetchT(url,ms=10000){const c=new AbortController();const t=setTimeout((
 async function pullEspnScores(){
   let got=0, ok=false;
   const full=Date.now()-espnLoadedAt>10*60000;
-  const dates=full?ESPN_DATES:espnDateWindow();
-  if(!dates.length) return {got,ok};
-  for(const d of dates){
+  const ranges=full?ESPN_FULL_RANGES:espnDateWindow();
+  for(const d of ranges){
     try{
       const res=await fetchT(`${ESPN_SCOREBOARD}?dates=${d}`,9000);
       if(!res.ok) continue;
