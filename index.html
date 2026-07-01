@@ -393,12 +393,85 @@ function openPicker(){
 applyFav();
 
 const WC_LEAGUE_ID = 4429; // FIFA World Cup on TheSportsDB
+const ESPN_SCOREBOARD = "https://site.api.espn.com/apis/site/v2/sports/soccer/fifa.world/scoreboard";
+
+function isGroupStage(m){return /^[A-L]$/.test(m.g);}
+function stageText(m){return isGroupStage(m)?`Group ${m.g}`:(STAGE_LABEL[m.g]||m.g);}
+function canonicalTeamName(s){return Object.keys(FLAGS).find(t=>key(t)===key(s))||s;}
+function dateKeyUTC(d){return d.toISOString().slice(0,10).replace(/-/g,"");}
+function eventTime(ev){
+  const raw=ev.strTimestamp||`${ev.dateEvent||""}T${ev.strTime||"00:00:00"}`;
+  if(!raw||raw==="T00:00:00") return NaN;
+  return Date.parse(/[zZ]|[+-]\d\d:?\d\d$/.test(raw)?raw:raw+"Z");
+}
+const ESPN_DATES=[...new Set(F.filter(m=>!isGroupStage(m)).map(m=>dateKeyUTC(m.ko)))];
+function espnDateWindow(){
+  const days=[];
+  for(let off=-1;off<=1;off++) days.push(dateKeyUTC(new Date(Date.now()+off*864e5)));
+  return [...new Set(days.filter(d=>ESPN_DATES.includes(d)))];
+}
+function venueText(venue){
+  const city=venue&&venue.address&&venue.address.city?venue.address.city:"";
+  return [venue&&venue.fullName,city].filter(Boolean).join(" ");
+}
+function sameVenue(m, venue){
+  const vn=norm(venue);
+  if(!vn) return false;
+  const city=norm(m.c), stadium=norm(m.v);
+  const aliases={
+    "houston":["nrg"],
+    "boston":["gillette","foxborough"],
+    "san francisco":["levi","santa clara"],
+    "los angeles":["sofi","inglewood"],
+    "new jersey":["metlife","east rutherford"],
+    "mexico city":["banorte"],
+    "philadelphia":["lincoln financial"],
+    "kansas city":["arrowhead"],
+    "dallas":["at t","att","arlington"],
+    "miami":["hard rock"],
+    "atlanta":["mercedes benz"],
+    "seattle":["lumen"],
+    "toronto":["bmo"]
+  };
+  return vn.includes(city)||stadium.includes(vn)||vn.includes(stadium)||
+    (aliases[city]||[]).some(a=>vn.includes(a));
+}
+function espnStatus(comp){
+  const type=(comp.status&&comp.status.type)||{};
+  if(type.completed) return type.description||"FT";
+  if(type.state==="in") return type.shortDetail||type.detail||type.description||"Live";
+  return type.description||"Scheduled";
+}
+function absorbEspnEvent(ev){
+  const comp=(ev.competitions||[])[0];
+  if(!comp) return 0;
+  const home=(comp.competitors||[]).find(c=>c.homeAway==="home");
+  const away=(comp.competitors||[]).find(c=>c.homeAway==="away");
+  if(!home||!away) return 0;
+  const type=(comp.status&&comp.status.type)||{};
+  const started=type.completed||type.state==="in";
+  const homeName=canonicalTeamName(home.team.displayName||home.team.shortDisplayName);
+  const awayName=canonicalTeamName(away.team.displayName||away.team.shortDisplayName);
+  return absorbEvent({
+    strLeague:"FIFA World Cup",
+    strHomeTeam:homeName,
+    strAwayTeam:awayName,
+    intHomeScore:started?home.score:"",
+    intAwayScore:started?away.score:"",
+    strTimestamp:ev.date,
+    strVenue:venueText(comp.venue),
+    strStatus:espnStatus(comp),
+    strProgress:type.shortDetail||type.detail||"",
+    strWinner:(home.winner?homeName:away.winner?awayName:"")
+  });
+}
 
 function absorbEvent(ev){
   if(!/world cup/i.test(ev.strLeague||"")) return 0;
   const hk=key(ev.strHomeTeam), ak=key(ev.strAwayTeam);
-  const ts=Date.parse((ev.strTimestamp||ev.dateEvent+"T"+(ev.strTime||"00:00:00"))+ (ev.strTimestamp?"":"Z"));
-  let m=F.find(x=>x.ko_known && key(x.h)===hk && key(x.a)===ak);
+  const ts=eventTime(ev);
+  let m=F.find(x=>x.ko_known &&
+    ((key(x.h)===hk && key(x.a)===ak)||(key(x.h)===ak && key(x.a)===hk)));
   if(!m && !isNaN(ts)){
     // fuzzy: same kick-off window and at least one team name recognised (either side)
     const c=F.filter(x=>x.ko_known && Math.abs(x.ko.getTime()-ts)<45*60000 &&
@@ -407,34 +480,60 @@ function absorbEvent(ev){
   }
   if(!m && !isNaN(ts)){
     // knockout fixture? match TBD slots by kick-off time (+ city if two games share a slot)
-    const cands=F.filter(x=>!x.ko_known && Math.abs(x.ko.getTime()-ts)<45*60000);
+    let cands=F.filter(x=>!x.ko_known && Math.abs(x.ko.getTime()-ts)<45*60000);
+    if(!cands.length){
+      cands=F.filter(x=>!x.ko_known && Math.abs(x.ko.getTime()-ts)<=4*60*60000);
+    }
     if(cands.length===1) m=cands[0];
     else if(cands.length>1){
-      const vn=norm(ev.strVenue||"");
-      m=cands.find(x=>vn && (vn.includes(norm(x.c))||norm(x.v).includes(vn)));
+      m=cands.find(x=>sameVenue(x,ev.strVenue||""))||
+        cands.sort((a,b)=>Math.abs(a.ko.getTime()-ts)-Math.abs(b.ko.getTime()-ts))[0];
     }
     if(m){ m.h=ev.strHomeTeam; m.a=ev.strAwayTeam; m.ko_known=true;
            m.qatar=(key(m.h)===key(FAV)||key(m.a)===key(FAV)); }
   }
   if(!m) return 0;
+  if(!isNaN(ts)&&!isGroupStage(m)) m.ko=new Date(ts);
   if(ev.intHomeScore!=null&&ev.intHomeScore!==""){
     const swapped=(key(m.h)===ak && key(m.a)===hk);
     scores[m.i]={hs:swapped?ev.intAwayScore:ev.intHomeScore,
                  as:swapped?ev.intHomeScore:ev.intAwayScore,
-                 status:ev.strStatus||ev.strProgress||"",min:ev.strProgress||""};
+                 status:ev.strStatus||ev.strProgress||"",
+                 min:ev.strProgress||"",
+                 winner:ev.strWinner||""};
     return 1;
   }
   return 0;
 }
 
-let seasonLoadedAt=0;
+let seasonLoadedAt=0, espnLoadedAt=0;
 function fetchT(url,ms=10000){const c=new AbortController();const t=setTimeout(()=>c.abort(),ms);
   return fetch(url,{cache:"no-store",signal:c.signal}).finally(()=>clearTimeout(t));}
+async function pullEspnScores(){
+  let got=0, ok=false;
+  const full=Date.now()-espnLoadedAt>10*60000;
+  const dates=full?ESPN_DATES:espnDateWindow();
+  if(!dates.length) return {got,ok};
+  for(const d of dates){
+    try{
+      const res=await fetchT(`${ESPN_SCOREBOARD}?dates=${d}`,9000);
+      if(!res.ok) continue;
+      const data=await res.json(); ok=true;
+      (data.events||[]).forEach(ev=>{got+=absorbEspnEvent(ev);});
+    }catch(e){}
+  }
+  if(full&&ok) espnLoadedAt=Date.now();
+  return {got,ok};
+}
 async function pullScores(){
   const feed=document.getElementById("feed");
   let got=0, ok=false;
 
-  // 1) season-wide results (all played matches keep their scores) — refresh every 10 min
+  // 1) ESPN is the strongest source for knockout teams, completed scores and next-round slots.
+  const espn=await pullEspnScores();
+  got+=espn.got; ok=ok||espn.ok;
+
+  // 2) season-wide backup results (all played matches keep their scores) — refresh every 10 min
   if(Date.now()-seasonLoadedAt>10*60000){
     try{
       const res=await fetchT(`https://www.thesportsdb.com/api/v1/json/${KEY}/eventsseason.php?id=${WC_LEAGUE_ID}&s=2026`);
@@ -443,7 +542,7 @@ async function pullScores(){
     }catch(e){}
   }
 
-  // 2) today's feed for the freshest in-play scores
+  // 3) TheSportsDB day feed remains as a quiet backup.
   for(let off=-1;off<=0;off++){
     const d=new Date(Date.now()+off*864e5).toISOString().slice(0,10);
     try{
@@ -456,7 +555,7 @@ async function pullScores(){
 
   const total=Object.keys(scores).length;
   if(ok){feed.className="feed ok";feed.querySelector("span").textContent=
-      `Live feed connected · ${total} score${total===1?"":"s"} loaded · updates every ${SCORE_REFRESH_MS/1000}s`+(PREMIUM_KEY?" · premium":"");}
+      `Live feed connected · ESPN primary · ${total} score${total===1?"":"s"} loaded · updates every ${SCORE_REFRESH_MS/1000}s`+(PREMIUM_KEY?" · premium":"");}
   else{feed.className="feed err";feed.querySelector("span").textContent=
       "No live feed right now — schedule & countdowns still work offline.";}
   render();
@@ -480,7 +579,7 @@ function renderRail(){
     const m=lives[0], s=scores[m.i];
     rail.className="rail islive";
     rail.innerHTML=`<div class="top"><span class="live-dot"><i></i>Live now</span>
-      ${m.qatar?'<span class="qchip">'+FAV+'</span>':`<span class="badge">Group ${m.g}</span>`}</div>
+      ${m.qatar?'<span class="qchip">'+FAV+'</span>':`<span class="badge">${stageText(m)}</span>`}</div>
       <div class="match">
         <div class="teams">${m.h} <span style="color:var(--faint)">v</span> ${m.a}
           <div class="meta">${m.v} · ${m.c}${lives.length>1?` &nbsp;·&nbsp; +${lives.length-1} more live`:""}</div></div>
@@ -499,7 +598,7 @@ function renderRail(){
   const qn=nextMatch(true);
   const sameQ=qn&&qn.i===m.i;
   rail.innerHTML=`<div class="top"><span class="badge">Next kick-off</span>
-      ${m.qatar?'<span class="qchip">'+favFlag()+' '+FAV+'</span>':`<span class="badge">${m.ko_known?'Group '+m.g:STAGE_LABEL[m.g]}</span>`}</div>
+      ${m.qatar?'<span class="qchip">'+favFlag()+' '+FAV+'</span>':`<span class="badge">${stageText(m)}</span>`}</div>
     <div class="countdown tnum ${m.qatar?'q':''}">${cd}</div>
     <div class="match"><div class="teams">${m.ko_known?`${m.h} <span style="color:var(--faint)">v</span> ${m.a}`:STAGE_LABEL[m.g]}
       <div class="meta">${dohaTime(m.ko)} · ${m.v} · ${m.c}</div>
@@ -584,8 +683,8 @@ function render(){
       const cnt=items.filter(x=>dohaDayKey(x.ko)===dk).length;
       html+=`<div class="day">${dohaDayLong(m.ko)}<span class="n">${cnt} match${cnt===1?"":"es"}</span></div>`;}
     const st=statusOf(m), sc=scoreStr(m);
-    const stage=m.ko_known?`Group ${m.g}`:STAGE_LABEL[m.g];
-    const grpCls=m.ko_known?"grp":"grp ko";
+    const stage=stageText(m);
+    const grpCls=isGroupStage(m)?"grp":"grp ko";
     const pill = st==="live"?`<span class="pill live">Live</span>`
               : st==="fin"?`<span class="pill ft">FT</span>`
               : "";
@@ -601,7 +700,7 @@ function render(){
       <div class="time">${dohaTime(m.ko)}<span class="ko">${st==='soon'?'KO':st==='live'?'• now':'done'}</span></div>
       <div class="body"><div class="tline">${center}</div>
         <div class="place">📍 ${m.v} <span class="city">· ${m.c}</span></div></div>
-      <div class="right"><span class="${grpCls}">${m.ko_known?'Grp '+m.g:m.g}</span>${pill}</div>
+      <div class="right"><span class="${grpCls}">${isGroupStage(m)?'Grp '+m.g:m.g}</span>${pill}</div>
     </div>`;
   });
   list.innerHTML=html;
